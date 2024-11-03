@@ -1,94 +1,117 @@
 import cv2
 import numpy as np
-from utils.line_detection import get_line_yellow_of_frame  
+from utils.line_detection import get_line_yellow_of_frame
+ 
 
-# Cargar YOLOv3
-net = cv2.dnn.readNet('./models/yolo/yolov3.weights', './models/yolo/yolov3.cfg')
-layer_names = net.getLayerNames()
-output_layers = [layer_names[i - 1] for i in net.getUnconnectedOutLayers()]
-cap = cv2.VideoCapture('./data/example01.mp4')
+# Configuración de YOLO
+YOLO_WEIGHTS = './models/yolo/yolov3.weights'
+YOLO_CONFIG = './models/yolo/yolov3.cfg'
+COCO_NAMES = './models/yolo/coco.names'
 
-# Cargar el archivo de nombres de las clases
-classes = []
-with open("./models/yolo/coco.names", "r") as f:
-    classes = [line.strip() for line in f.readlines()]
+# Parámetros de detección
+CONFIDENCE_THRESHOLD = 0.5
+NMS_THRESHOLD = 0.4
+FRAME_SKIP = 3  # Detectar cada 3 frames
+YOLO_INPUT_SIZE = (416, 416)
 
-# Leer el primer frame para detectar la línea amarilla
-ret, frame = cap.read()
-if not ret:
-    print("No se pudo leer el video.")
-    cap.release()
-    cv2.destroyAllWindows()
-    exit()
+DATA_VIDEO = './data/example02.mp4'
 
-#line_x = get_line_yellow_of_frame(frame)
+def load_yolo():
+    """Cargar el modelo YOLO."""
+    net = cv2.dnn.readNet(YOLO_WEIGHTS, YOLO_CONFIG)
+    layer_names = net.getLayerNames()
+    output_layers = [layer_names[i - 1] for i in net.getUnconnectedOutLayers()]
+    return net, output_layers
 
-# Inicializar contador de frames
-frame_count = 0
-frame_skip = 3  # Saltar 2 frames, es decir, detectar cada 3 frames
+def perform_yolo_detection(net, output_layers, frame, classes):
+    """Realizar detección de personas usando YOLO."""
+    height, width = frame.shape[:2]
+    blob = cv2.dnn.blobFromImage(frame, 0.00392, YOLO_INPUT_SIZE, (0, 0, 0), True, crop=False)
+    net.setInput(blob)
+    outs = net.forward(output_layers)
 
-# Ciclo para procesar el video
-while True:
-    ret, frame = cap.read()
-    if not ret:
-        break
-    
-    line_x = get_line_yellow_of_frame(frame)
+    boxes, confidences, class_ids = [], [], []
+    for out in outs:
+        for detection in out:
+            scores = detection[5:]
+            class_id = np.argmax(scores)
+            confidence = scores[class_id]
+            if confidence > CONFIDENCE_THRESHOLD and class_id == classes.index("person"):
+                center_x = int(detection[0] * width)
+                center_y = int(detection[1] * height)
+                w, h = int(detection[2] * width), int(detection[3] * height)
+                x = int(center_x - w / 2)
+                y = int(center_y - h / 2)
+                boxes.append([x, y, w, h])
+                confidences.append(float(confidence))
+                class_ids.append(class_id)
 
-    # Dibujar la línea amarilla detectada en todos los frames
-    if line_x is not None:
-        cv2.line(frame, (line_x, 0), (line_x, frame.shape[0]), (0, 255, 255), 2)
+    # Aplicar Non-Maximum Suppression
+    indexes = cv2.dnn.NMSBoxes(boxes, confidences, CONFIDENCE_THRESHOLD, NMS_THRESHOLD)
+    return boxes, class_ids, indexes
 
-    # Solo realizar inferencia con YOLOv3 cada 3 frames
-    if frame_count % frame_skip == 0:
-        height, width, channels = frame.shape
-        blob = cv2.dnn.blobFromImage(frame, 0.00392, (416, 416), (0, 0, 0), True, crop=False)
-        net.setInput(blob)
-        outs = net.forward(output_layers)
-
-        class_ids = []
-        confidences = []
-        boxes = []
-
-        for out in outs:
-            for detection in out:
-                scores = detection[5:]
-                class_id = np.argmax(scores)
-                confidence = scores[class_id]
-                if confidence > 0.5 and class_id == classes.index("person"):  # Detectar solo personas
-                    center_x = int(detection[0] * width)
-                    center_y = int(detection[1] * height)
-                    w = int(detection[2] * width)
-                    h = int(detection[3] * height)
-                    x = int(center_x - w / 2)
-                    y = int(center_y - h / 2)
-                    boxes.append([x, y, w, h])
-                    confidences.append(float(confidence))
-                    class_ids.append(class_id)
-
-        # Aplicar Non-Maximum Suppression para eliminar cajas redundantes
-        indexes = cv2.dnn.NMSBoxes(boxes, confidences, 0.5, 0.4)
-
-    # Dibujar cajas alrededor de las personas detectadas y verificar si cruzan la línea amarilla
-    for i in indexes:
+def draw_detections(frame, boxes, class_ids, indexes, line_x, classes):
+    """Dibujar las detecciones de personas y la línea amarilla."""
+    for i in indexes.flatten():  # Asegúrate de aplanar los índices
         x, y, w, h = boxes[i]
         label = str(classes[class_ids[i]])
         cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
         cv2.putText(frame, label, (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
 
-        # Mejorar la detección del cruce, usando el centro del bounding box
+        # Verificar si la persona cruza la línea amarilla
         person_center_x = x + w // 2
         if line_x is not None and person_center_x > line_x:
             cv2.putText(frame, "ALERTA: Persona cruzando la linea", (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
 
-    # Mostrar el video con las detecciones
-    cv2.imshow('Deteccion de Personas y Linea Amarilla Vertical', frame)
+def main():
+    """Función principal para procesar el video y detectar personas y línea amarilla."""
+    # Cargar modelos y clases
+    net, output_layers = load_yolo()
+    with open(COCO_NAMES, "r") as f:
+        classes = f.read().strip().split("\n")
 
-    # Incrementar el contador de frames
-    frame_count += 1
+    # Capturar video
+    cap = cv2.VideoCapture(DATA_VIDEO)
+    if not cap.isOpened():
+        print("Error: No se pudo abrir el video.")
+        return
 
-    if cv2.waitKey(1) & 0xFF == ord('q'):
-        break
+    first_yellow_line = None
+    frame_count = 0
+    last_boxes, last_class_ids, last_indexes = [], [], []
 
-cap.release()
-cv2.destroyAllWindows()
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            break
+        
+        # Detectar línea amarilla
+        if first_yellow_line is None:
+            first_yellow_line = get_line_yellow_of_frame(frame)
+        
+        line_x = first_yellow_line
+
+        # Dibujar la línea amarilla en el frame
+        if line_x is not None:
+            cv2.line(frame, (line_x, 0), (line_x, frame.shape[0]), (0, 255, 255), 2)
+        
+        # Solo realizar detección cada 3 frames
+        if frame_count % FRAME_SKIP == 0:
+            last_boxes, last_class_ids, last_indexes = perform_yolo_detection(net, output_layers, frame, classes)
+        
+        draw_detections(frame, last_boxes, last_class_ids, last_indexes, line_x, classes)
+
+        # Mostrar el video
+        cv2.imshow('Deteccion de Personas y Linea Amarilla Vertical', frame)
+
+        # Incrementar contador de frames
+        frame_count += 1
+
+        if cv2.waitKey(30) & 0xFF == ord('q'):
+            break
+
+    cap.release()
+    cv2.destroyAllWindows()
+
+if __name__ == "__main__":
+    main()

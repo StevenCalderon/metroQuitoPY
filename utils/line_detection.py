@@ -37,6 +37,6 @@ def detect_line_yellow(frame):
     if lines is not None:
         for line in lines:
             x1, y1, x2, y2 = line[0]
-            if abs(x2 - x1) < 10:  # Ajusta este valor según sea necesario
+            if abs(x2 - x1) < 10:
                 vertical_lines.append(line)
     return get_longest_line(vertical_lines)
