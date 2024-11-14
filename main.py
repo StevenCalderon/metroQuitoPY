@@ -3,15 +3,12 @@ import numpy as np
 import torch
 from ultralytics import YOLO
 
-from share.utils.metroUtil import check_train_movement_in_rois, detect_train_movement, detect_movement_in_roi, select_roi
+from share.utils.metroUtil import check_train_movement_in_rois
 
-
-# Parámetros de detección
 CONFIDENCE_THRESHOLD = 0.5
-FRAME_SKIP = 3  # Detectar cada 3 frames
+FRAME_SKIP = 3 
 SAFE_WIDTH = 20
 DATA_VIDEO = './data/example01.mp4'
-OUTPUT_VIDEO = './output/deteccion_personas_franja_amarilla.mp4'  # Ruta de salida para el video
 rois = [(274, 193, 310, 288), (295, 321, 416, 473), (358, 590, 471, 843)]
 
 def detect_yellow_and_green_bands(frame, scale_factor=1.4):
@@ -104,9 +101,9 @@ def main():
         if not ret:
             break
 
-        #if (band_points is None or green_band_points is None or not band_points.size or not green_band_points.size):
+        if (band_points is None or green_band_points is None or not band_points.size or not green_band_points.size):
             band_points, green_band_points = detect_yellow_and_green_bands(frame)
-        band_points, green_band_points = detect_yellow_and_green_bands(frame)
+        #band_points, green_band_points = detect_yellow_and_green_bands(frame)
         
         if frame_count % FRAME_SKIP == 0:
             last_boxes, last_class_ids, last_confidences = perform_yolo_detection(model, frame)
@@ -120,9 +117,9 @@ def main():
             cv2.rectangle(frame, (x1, y1), (x2, y2), (255, 0, 0), 2) 
         
         # Muestra estado del tren
-        text = "Tren en movimiento" if train_moving else "Tren detenido"
-        color = (0, 0, 255) if train_moving else (0, 255, 0)
-        cv2.putText(frame, text, (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, color, 2)
+        #text = "Tren en movimiento" if train_moving else "Tren detenido"
+        #color = (0, 0, 255) if train_moving else (0, 255, 0)
+        #cv2.putText(frame, text, (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, color, 2)
 
         # Actualiza el cuadro anterior
         prev_frame = frame
