@@ -89,11 +89,11 @@ def main():
             yellow_band_points = detect_yellow_band(frame)
             
         # Process frame every FRAME SKIP frames
-        if frame_count % FRAME_SKIP == 0:
-            last_boxes, last_class_ids = perform_yolo_detection(model, frame)
-            train_moving, train_stopped_counter, frames_wait_procces_roi, consecutive_moving_frames = evaluate_train_state(
-                frame, prev_frame, train_moving, train_stopped_counter, frames_wait_procces_roi, consecutive_moving_frames
-            )
+        #if frame_count % FRAME_SKIP == 0:
+        last_boxes, last_class_ids = perform_yolo_detection(model, frame)
+        train_moving, train_stopped_counter, frames_wait_procces_roi, consecutive_moving_frames = evaluate_train_state(
+            frame, prev_frame, train_moving, train_stopped_counter, frames_wait_procces_roi, consecutive_moving_frames
+        )
 
         # Update previous frame and draw ROIs
         prev_frame = frame.copy()
@@ -105,7 +105,7 @@ def main():
             cv2.putText(frame, "Tren detenido - Alerta desactivada", (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, GREEN_COLOR, 2)        
         cv2.imshow('Deteccion de Personas y Franja Amarilla', frame)
 
-        frame_count += 1
+        #frame_count += 1
         
         if cv2.waitKey(30) & 0xFF == ord('q'):
             break
