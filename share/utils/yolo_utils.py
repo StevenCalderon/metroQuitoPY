@@ -14,18 +14,16 @@ def perform_yolo_detection(model, frame):
     Realiza la detección de personas con YOLO.
     """
     results = model(frame)
-    boxes, confidences, class_ids = [], [], []
+    boxes, class_ids = [], []
 
     for result in results:
         for box in result.boxes:
             if box.conf[0] > CONFIDENCE_THRESHOLD and int(box.cls[0]) == 0:
                 x1, y1, x2, y2 = map(int, box.xyxy[0])
-                confidence = float(box.conf[0])
                 boxes.append([x1, y1, x2 - x1, y2 - y1])
-                confidences.append(confidence)
                 class_ids.append(int(box.cls[0]))
 
-    return boxes, class_ids, confidences
+    return boxes, class_ids
 
 def load_classes(classes_file):
     """
