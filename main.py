@@ -66,7 +66,7 @@ def main():
         print("Error: Could not open the video.")
         return
 
-    last_boxes, last_class_ids = [], [], []
+    last_boxes, last_class_ids = [], []
     yellow_band_points = None
     ret, prev_frame = cap.read()
     if not ret:

@@ -7,6 +7,7 @@ def load_yolo_model(model_path):
     Carga el modelo YOLO desde el path dado.
     """
     device = "cuda" if torch.cuda.is_available() else "cpu"
+    print("Device", device)
     return YOLO(model_path).to(device)
 
 def perform_yolo_detection(model, frame):
