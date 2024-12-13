@@ -56,15 +56,23 @@ def evaluate_train_state(frame, prev_frame, train_moving, train_stopped_counter,
     return train_moving, train_stopped_counter, wait_frames, consecutive_moving_frames
 
 
-
-def main():
+def process_video(video_path, output_path):
     model = load_yolo_model(YOLO_MODEL_PATH)
     classes = load_classes(CLASSES_FILE)
-
-    cap = cv2.VideoCapture(DATA_VIDEO)
+    
+    cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
         print("Error: Could not open the video.")
         return
+
+    # Obtención de las propiedades del video
+    fps = cap.get(cv2.CAP_PROP_FPS)
+    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+
+    # Definir el códec y crear un objeto VideoWriter para guardar el video procesado
+    fourcc = cv2.VideoWriter_fourcc(*'XVID')
+    out = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
 
     last_boxes, last_class_ids = [], []
     yellow_band_points = None
@@ -102,17 +110,14 @@ def main():
         if train_moving:
             draw_detections(frame, last_boxes, last_class_ids, yellow_band_points, classes)
         else:
-            cv2.putText(frame, "Tren detenido - Alerta desactivada", (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, GREEN_COLOR, 2)        
+            cv2.putText(frame, "Tren detenido - Alerta desactivada", (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, GREEN_COLOR, 2)    
+                
         cv2.imshow('Deteccion de Personas y Franja Amarilla', frame)
-
-        #frame_count += 1
         
-        if cv2.waitKey(30) & 0xFF == ord('q'):
-            break
-
+        out.write(frame)
+        
     cap.release()
+    out.release()
     cv2.destroyAllWindows()
+    print(f"Video procesado guardado en: {output_path}")
 
-
-if __name__ == "__main__":
-    main()
