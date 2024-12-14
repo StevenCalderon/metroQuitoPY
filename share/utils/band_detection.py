@@ -25,6 +25,7 @@ def detect_yellow_band(frame):
 
 
 def check_train_movement_in_rois(frame, rois, prev_frame,threshold):
+    print("check_train_movement_in_rois",rois)
     movement_detected = False
     for roi in rois:
         x1, y1, x2, y2 = roi
@@ -56,18 +57,32 @@ def select_roi():
 def detect_movement_in_roi(prev_frame, curr_frame, roi_coords, threshold=MOVEMENT_THRESHOLD):
     PIXEL_MAX_VALUE = 255
     x1, y1, x2, y2 = roi_coords
-        
-    # Extract the region of interest from both frames
+
+    # Verifica que los frames no sean None
+    if prev_frame is None or curr_frame is None:
+        raise ValueError("Los frames no pueden ser None.")
+    
+    # Verifica las dimensiones del ROI
+    height, width = prev_frame.shape[:2]
+    if x1 < 0 or y1 < 0 or x2 > width or y2 > height:
+        raise ValueError(f"Coordenadas ROI fuera de los límites: {roi_coords}")
+
+    # Extrae la región de interés (ROI) de ambos frames
     prev_roi = prev_frame[y1:y2, x1:x2]
     curr_roi = curr_frame[y1:y2, x1:x2]
-     
+
+    # Calcula la diferencia absoluta
     diff = cv2.absdiff(prev_roi, curr_roi)
     
-    # Apply a threshold to reduce noise and focus on significant changes
+    # Aplica un umbral para filtrar cambios significativos
     _, diff_thresh = cv2.threshold(diff, 30, PIXEL_MAX_VALUE, cv2.THRESH_BINARY)
-    
-    # Counts the different pixels (motion) in the ROI
+
+    # Verifica si el resultado del umbral es válido
+    if diff_thresh is None:
+        raise ValueError("cv2.threshold devolvió None. Verifique los valores de entrada.")
+
+    # Cuenta los píxeles que representan movimiento en el ROI
     movement_pixels = np.sum(diff_thresh) / PIXEL_MAX_VALUE
-    
-    # Detects if there is enough movement to consider that the train is moving
+
+    # Detecta si hay suficiente movimiento según el umbral
     return movement_pixels > threshold

@@ -1,10 +1,11 @@
 import cv2
 import numpy as np
+import os 
 
 from share.constants.config import (CLASSES_FILE, DATA_VIDEO, FRAME_SKIP,
                                     GREEN_COLOR, MOVEMENT_THRESHOLD_METRO_MOVE,
                                     MOVEMENT_THRESHOLD_METRO_STOP, ROI_COLOR,
-                                    ROIS, STOPPED_FRAME_THRESHOLD,
+                                     STOPPED_FRAME_THRESHOLD,
                                     YOLO_MODEL_PATH)
 from share.utils.band_detection import (check_train_movement_in_rois,
                                         detect_yellow_band, select_roi)
@@ -13,11 +14,11 @@ from share.utils.yolo_utils import (load_classes, load_yolo_model,
                                     perform_yolo_detection)
 
 
-def draw_rois(frame):
+def draw_rois(frame, ROIS):
     for x1, y1, x2, y2 in ROIS:
         cv2.rectangle(frame, (x1, y1), (x2, y2), ROI_COLOR, 2)
 
-def evaluate_train_state(frame, prev_frame, train_moving, train_stopped_counter, wait_frames, consecutive_moving_frames):
+def evaluate_train_state(frame, prev_frame, train_moving, train_stopped_counter, wait_frames, consecutive_moving_frames,ROIS):
     """
     Evaluates the state of the train based on the movement in the regions of interest (ROIs).
 
@@ -56,29 +57,41 @@ def evaluate_train_state(frame, prev_frame, train_moving, train_stopped_counter,
     return train_moving, train_stopped_counter, wait_frames, consecutive_moving_frames
 
 
-def process_video(video_path, output_path):
+def process_video(video_path, output_path, ROIS):
     model = load_yolo_model(YOLO_MODEL_PATH)
     classes = load_classes(CLASSES_FILE)
     
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
-        print("Error: Could not open the video.")
+        print("Error: No se pudo abrir el video.")
         return
 
-    # Obtención de las propiedades del video
+    # Propiedades del video
     fps = cap.get(cv2.CAP_PROP_FPS)
     width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
 
-    # Definir el códec y crear un objeto VideoWriter para guardar el video procesado
-    fourcc = cv2.VideoWriter_fourcc(*'XVID')
-    out = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
+    # Validar ROIs
+    for roi in ROIS:
+        x1, y1, x2, y2 = roi
+        if x1 < 0 or y1 < 0 or x2 > width or y2 > height:
+            print(f"ROI inválido: ({x1}, {y1}, {x2}, {y2}).")
+            return
 
+    # Crear el archivo de salida
+    output_file = os.path.join(output_path, "video_procesado.mp4")
+    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+    out = cv2.VideoWriter(output_file, fourcc, fps, (width, height))
+    if not out.isOpened():
+        print(f"Error: No se pudo abrir el archivo de salida en {output_file}.")
+        return
+
+    # Variables de procesamiento
     last_boxes, last_class_ids = [], []
     yellow_band_points = None
     ret, prev_frame = cap.read()
     if not ret:
-        print("Error: Could not read the first frame.")
+        print("Error: No se pudo leer el primer frame.")
         return
 
     frame_count = 0
@@ -89,32 +102,38 @@ def process_video(video_path, output_path):
 
     while True:
         ret, frame = cap.read()
-        if not ret:
+        if not ret or frame is None:
+            print("Error: No se pudo leer un frame.")
             break
 
-        # Detect sidelines if not already detected
+        # Detectar bandas amarillas si no se detectaron previamente
         if yellow_band_points is None:
             yellow_band_points = detect_yellow_band(frame)
-            
-        # Process frame every FRAME SKIP frames
-        #if frame_count % FRAME_SKIP == 0:
+
+        # Procesar frame
         last_boxes, last_class_ids = perform_yolo_detection(model, frame)
         train_moving, train_stopped_counter, frames_wait_procces_roi, consecutive_moving_frames = evaluate_train_state(
-            frame, prev_frame, train_moving, train_stopped_counter, frames_wait_procces_roi, consecutive_moving_frames
+            frame, prev_frame, train_moving, train_stopped_counter, frames_wait_procces_roi, consecutive_moving_frames, ROIS
         )
 
-        # Update previous frame and draw ROIs
+        # Dibujar ROIs
         prev_frame = frame.copy()
-        draw_rois(frame)
+        draw_rois(frame, ROIS)
         
         if train_moving:
             draw_detections(frame, last_boxes, last_class_ids, yellow_band_points, classes)
         else:
-            cv2.putText(frame, "Tren detenido - Alerta desactivada", (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, GREEN_COLOR, 2)    
-                
+            cv2.putText(frame, "Tren detenido - Alerta desactivada", (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, GREEN_COLOR, 2)
+
+        # Guardar el frame procesado en el archivo de salida
         cv2.imshow('Deteccion de Personas y Franja Amarilla', frame)
-        
         out.write(frame)
+
+    cap.release()
+    out.release()
+    cv2.destroyAllWindows()
+    print(f"Video procesado guardado en: {output_file}")
+
         
     cap.release()
     out.release()

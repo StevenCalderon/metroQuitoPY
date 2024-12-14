@@ -1,7 +1,7 @@
 import cv2
 import numpy as np
 
-from share.constants.config import (ALERT_COLOR, GREEN_COLOR, ROI_COLOR, ROIS,
+from share.constants.config import (ALERT_COLOR, GREEN_COLOR, ROI_COLOR,
                                     YELLOW_COLOR)
 
         
