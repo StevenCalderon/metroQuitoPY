@@ -78,8 +78,10 @@ Ensure the following files exist in models/yolov8:
 yolov8n.pt
 coco.names
 4️⃣ Run the application
-bash
+```bash
 python main_gui.py
+```
+
 🏗️ Build an Executable (Optional)
 If you'd like to create a standalone executable for the application:
 
