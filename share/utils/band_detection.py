@@ -4,11 +4,22 @@ import numpy as np
 
 from share.constants.config import MOVEMENT_THRESHOLD
 
+def create_dynamic_color_range(selected_points):
+    # Convertir la lista de colores a un array de numpy
+    colors = np.array(selected_points)
+    
+    # Promediar los colores seleccionados
+    average_color = np.mean(colors, axis=0)
+    
+    # Usar el color promedio para crear un rango dinámico
+    lower_yellow = np.clip(average_color - np.array([10, 50, 50]), 0, 255).astype(np.uint8)
+    upper_yellow = np.clip(average_color + np.array([10, 50, 50]), 0, 255).astype(np.uint8)
+    
+    return lower_yellow, upper_yellow
 
-def detect_yellow_band(frame):
+def detect_yellow_band(frame, selected_points):
     hsv_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
-    lower_yellow = np.array([20, 60, 100])
-    upper_yellow = np.array([40, 180, 255])
+    lower_yellow, upper_yellow = create_dynamic_color_range(selected_points)
     yellow_mask = cv2.inRange(hsv_frame, lower_yellow, upper_yellow)
 
     kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 20))
@@ -24,20 +35,44 @@ def detect_yellow_band(frame):
     return yellow_band
 
 
-def check_train_movement_in_rois(frame, rois, prev_frame,threshold):
-    print("check_train_movement_in_rois",rois)
-    movement_detected = False
-    for roi in rois:
-        x1, y1, x2, y2 = roi
-        roi_frame = frame[y1:y2, x1:x2]
-        prev_roi_frame = prev_frame[y1:y2, x1:x2]
-        
-        movement_in_roi = detect_movement_in_roi(prev_roi_frame, roi_frame, (0, 0, x2-x1, y2-y1),threshold )
-        
-        if movement_in_roi:
-            return True
-        
+def check_train_movement_in_polygon(frame, polygon, prev_frame, threshold):
+    """
+    Verifica si hay movimiento dentro del área definida por un polígono.
+
+    Args:
+        frame (np.ndarray): Frame actual del video.
+        polygon (list): Lista de puntos [(x1, y1), (x2, y2), ...] que define el polígono.
+        prev_frame (np.ndarray): Frame anterior del video.
+        threshold (float): Umbral de movimiento para detectar cambios significativos.
+
+    Returns:
+        bool: True si se detecta movimiento dentro del polígono, False en caso contrario.
+    """
+    print("check_train_movement_in_polygon", polygon)
+
+    # Crear una máscara para el polígono
+    mask = np.zeros_like(frame[:, :, 0], dtype=np.uint8)  # Crear máscara monocromática
+    polygon_points = np.array(polygon, np.int32)
+    cv2.fillPoly(mask, [polygon_points], 255)
+
+    # Convertir los frames a escala de grises
+    gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    gray_prev_frame = cv2.cvtColor(prev_frame, cv2.COLOR_BGR2GRAY)
+
+    # Calcular la diferencia entre el frame actual y el anterior
+    diff = cv2.absdiff(gray_prev_frame, gray_frame)
+
+    # Aplicar la máscara al área del polígono
+    masked_diff = cv2.bitwise_and(diff, diff, mask=mask)
+
+    # Calcular el promedio de intensidad en el área del polígono
+    movement = np.sum(masked_diff) / np.sum(mask)
+
+    # Detectar si el movimiento supera el umbral
+    movement_detected = movement > threshold
+
     return movement_detected
+
 
 def select_roi():
     image = cv2.imread('./data/example01.jpg')
