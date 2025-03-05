@@ -35,43 +35,26 @@ def detect_yellow_band(frame, selected_points):
     return yellow_band
 
 
-def check_train_movement_in_polygon(frame, polygon, prev_frame, threshold):
-    """
-    Verifica si hay movimiento dentro del área definida por un polígono.
+def check_train_movement_in_polygon(prev_frame, polygon, current_frame, threshold):
+    mask = np.zeros(prev_frame.shape[:2], dtype=np.uint8)
+    cv2.fillPoly(mask, [np.array(polygon, dtype=np.int32)], 255)
 
-    Args:
-        frame (np.ndarray): Frame actual del video.
-        polygon (list): Lista de puntos [(x1, y1), (x2, y2), ...] que define el polígono.
-        prev_frame (np.ndarray): Frame anterior del video.
-        threshold (float): Umbral de movimiento para detectar cambios significativos.
+    gray_prev = cv2.cvtColor(prev_frame, cv2.COLOR_BGR2GRAY)
+    gray_curr = cv2.cvtColor(current_frame, cv2.COLOR_BGR2GRAY)
 
-    Returns:
-        bool: True si se detecta movimiento dentro del polígono, False en caso contrario.
-    """
-    print("check_train_movement_in_polygon", polygon)
+    gray_prev = cv2.GaussianBlur(gray_prev, (5, 5), 0)
+    gray_curr = cv2.GaussianBlur(gray_curr, (5, 5), 0)
 
-    # Crear una máscara para el polígono
-    mask = np.zeros_like(frame[:, :, 0], dtype=np.uint8)  # Crear máscara monocromática
-    polygon_points = np.array(polygon, np.int32)
-    cv2.fillPoly(mask, [polygon_points], 255)
+    roi_prev = cv2.bitwise_and(gray_prev, gray_prev, mask=mask)
+    roi_curr = cv2.bitwise_and(gray_curr, gray_curr, mask=mask)
 
-    # Convertir los frames a escala de grises
-    gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-    gray_prev_frame = cv2.cvtColor(prev_frame, cv2.COLOR_BGR2GRAY)
+    frame_diff = cv2.absdiff(roi_prev, roi_curr)
+    _, diff_thresh = cv2.threshold(frame_diff, 25, 255, cv2.THRESH_BINARY)
 
-    # Calcular la diferencia entre el frame actual y el anterior
-    diff = cv2.absdiff(gray_prev_frame, gray_frame)
+    movement_ratio = np.sum(diff_thresh > 0) / np.sum(mask > 0)
+    print(f"Movimiento detectado: {movement_ratio}, Umbral: {threshold}")
 
-    # Aplicar la máscara al área del polígono
-    masked_diff = cv2.bitwise_and(diff, diff, mask=mask)
-
-    # Calcular el promedio de intensidad en el área del polígono
-    movement = np.sum(masked_diff) / np.sum(mask)
-
-    # Detectar si el movimiento supera el umbral
-    movement_detected = movement > threshold
-
-    return movement_detected
+    return movement_ratio > threshold
 
 
 def select_roi():

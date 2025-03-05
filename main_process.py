@@ -14,85 +14,56 @@ from share.utils.yolo_utils import (load_classes, load_yolo_model,
                                     perform_yolo_detection)
 
 
-def draw_rois(frame, rois):
+def draw_polygon(frame, polygon):
     """
-    Dibuja las ROIs poligonales en el frame.
+    Dibuja un polígono en el frame.
 
     Args:
-        frame (np.ndarray): El frame en el que se dibujarán las ROIs.
-        rois (list): Lista de regiones definidas como polígonos (lista de puntos [(x1, y1), (x2, y2), ...]).
+        frame (np.ndarray): El frame en el que se dibujará el polígono.
+        polygon (list): Lista de puntos [(x1, y1), (x2, y2), ...] que forman el polígono.
     """
-    for roi in rois:
-        if isinstance(roi, list) and all(isinstance(point, tuple) and len(point) == 2 for point in roi):
-            polygon_points = np.array(roi, np.int32)
-            cv2.polylines(frame, [polygon_points], isClosed=True, color=ROI_COLOR, thickness=2)
-        else:
-            print(f"Formato de ROI inválido: {roi}.")
+    # Verificar si el formato es correcto: una lista de puntos (tuplas)
+    if isinstance(polygon, list) and all(isinstance(point, tuple) and len(point) == 2 for point in polygon):
+        polygon_points = np.array(polygon, np.int32)
+        polygon_points = polygon_points.reshape((-1, 1, 2))  # Necesario para polylines
+        cv2.polylines(frame, [polygon_points], isClosed=True, color=(0, 255, 0), thickness=2)  # Color verde
+        cv2.imshow("Polygon ROI", frame)
+        cv2.waitKey(1)
+    else:
+        print(f"Formato de polígono inválido: {polygon}.")
+        
 
-def validate_rois(rois, frame_width, frame_height):
-    """
-    Valida que las ROIs poligonales no se salgan de los límites del frame.
-
-    Args:
-        rois (list): Lista de ROIs (polígonos como listas de puntos).
-        frame_width (int): Ancho del frame.
-        frame_height (int): Altura del frame.
-
-    Returns:
-        bool: True si todas las ROIs son válidas, False si alguna es inválida.
-    """
-    for roi in rois:
-        if isinstance(roi, list) and all(isinstance(point, tuple) and len(point) == 2 for point in roi):
-            for x, y in roi:
-                if x < 0 or y < 0 or x > frame_width or y > frame_height:
-                    print(f"ROI poligonal inválido: {roi}. Punto fuera de los límites: ({x}, {y})")
-                    return False
-        else:
-            print(f"Formato de ROI inválido: {roi}.")
-            return False
-    return True
-
-
-def evaluate_train_state(frame, prev_frame, train_moving, train_stopped_counter, wait_frames, consecutive_moving_frames,polygon_metro):
-    """
-    Evaluates the state of the train based on the movement in the regions of interest (ROIs).
-
-    Args:
-        frame (np.ndarray): The current frame of the video.
-        prev_frame (np.ndarray): The previous frame of the video.
-        train_moving (bool): Current state of the train (moving or stopped).
-        train_stopped_counter (int): Counter of consecutive frames without movement.
-        wait_frames (int): Counter to wait before reprocessing ROIs.
-        consecutive_moving_frames (int): Counter of consecutive frames with movement.
-
-    Returns:
-        tuple: (train_moving, train_stopped_counter, wait_frames, consecutive_moving_frames)
-    """
+def evaluate_train_state(frame, prev_frame, train_moving, train_stopped_counter, wait_frames, consecutive_moving_frames, polygon_metro):
     if wait_frames > 0:
         return train_moving, train_stopped_counter, wait_frames - 1, consecutive_moving_frames
 
+    # Determinar el umbral adecuado según el estado actual
     threshold = MOVEMENT_THRESHOLD_METRO_STOP if train_moving else MOVEMENT_THRESHOLD_METRO_MOVE
-    
+
+    # Evaluar movimiento en el polígono
     train_moving_in_rois = check_train_movement_in_polygon(prev_frame, polygon_metro, frame, threshold)
 
+    # Dibuja el polígono en el frame para visualización
+    cv2.polylines(frame, [np.array(polygon_metro, dtype=np.int32)], isClosed=True, color=(0, 255, 0), thickness=2)
+
+    # Actualizar contadores según el movimiento detectado
     if train_moving_in_rois:
         consecutive_moving_frames += 1
-        # If the train has been moving for long enough, mark it as moving
         if consecutive_moving_frames >= STOPPED_FRAME_THRESHOLD:
             train_moving = True
             train_stopped_counter = 0
     else:
         train_stopped_counter += 1
-        # If he has been detained for long enough, mark him as detained
         if train_stopped_counter >= STOPPED_FRAME_THRESHOLD:
             consecutive_moving_frames = 0
             train_moving = False
-            wait_frames = 18  # Avoid rapid re-evaluations
+            wait_frames = 5  # Evitar reevaluaciones rápidas
 
     return train_moving, train_stopped_counter, wait_frames, consecutive_moving_frames
 
 
-def process_video(video_path, output_path, selected_points, polygon_metro, progress_bar=None):
+
+def process_video(video_path, output_path, safe_zone, polygon_metro, display_frame, progress_bar=None):
     model = load_yolo_model(YOLO_MODEL_PATH)
     classes = load_classes(CLASSES_FILE)
     
@@ -106,13 +77,6 @@ def process_video(video_path, output_path, selected_points, polygon_metro, progr
     width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))  # Total de frames
-
-    # Validar ROIs
-    #for roi in polygon_metro:
-    #    x1, y1, x2, y2 = roi
-    #    if x1 < 0 or y1 < 0 or x2 > width or y2 > height:
-    #        print(f"ROI inválido: ({x1}, {y1}, {x2}, {y2}).")
-    #        return
 
     # Crear el archivo de salida
     output_file = os.path.join(output_path, "video_procesado.mp4")
@@ -153,9 +117,9 @@ def process_video(video_path, output_path, selected_points, polygon_metro, progr
         )
 
         # Dibujar ROIs
-        prev_frame = frame.copy()
-        draw_rois(frame, polygon_metro)
         
+        draw_polygon(frame, polygon_metro)
+        print("TREN EN MOVIMIENTO", train_moving)
         if train_moving:
             draw_detections(frame, last_boxes, last_class_ids, yellow_band_points, classes)
         else:
@@ -163,8 +127,9 @@ def process_video(video_path, output_path, selected_points, polygon_metro, progr
             cv2.putText(frame, "Alerta desactivada", (50, 90), cv2.FONT_HERSHEY_SIMPLEX, 1, GREEN_COLOR, 2)
 
         # Guardar el frame procesado en el archivo de salida
-        cv2.imshow('Detección de Personas y Franja Amarilla', frame)
+        display_frame(frame)
         out.write(frame)
+        prev_frame = frame.copy()
 
         # Actualizar la barra de progreso (si se ha pasado como parámetro)
         if progress_bar:

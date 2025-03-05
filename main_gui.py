@@ -9,7 +9,7 @@ import os
 from threading import Thread
 
 import numpy as np
-from main_process import process_video
+from main_process import process_video, draw_polygon
 
 
 class VideoProcessorApp:
@@ -29,13 +29,14 @@ class VideoProcessorApp:
         # Variables
         self.video_path = None
         self.first_frame = None
-        self.polygon = []
+        self.train_zone  = []
         self.current_rectangle = None
         self.cap = None
         self.output_path = None
         self.frame_width = 0
         self.frame_height = 0
-        self.selected_points = []
+        self.safe_zone = []
+        self.drawing_enabled = False 
 
         # Estilos para botones
         self.button_enabled_style = {
@@ -102,9 +103,6 @@ class VideoProcessorApp:
         self.progress_bar_frame = Frame(self.menu_frame, bg="#ffffff")  # Contenedor para la barra de progreso
         self.progress_bar_frame.pack(pady=10)
         self.progress_bar = ttk.Progressbar(self.menu_frame, orient="horizontal", length=200, mode="determinate")
-        #self.progress_bar.pack(pady=10)
-
-
 
         # Botones en el orden correcto
         self.load_button = Button(
@@ -122,6 +120,19 @@ class VideoProcessorApp:
             **self.button_disabled_style
         )
         self.save_button.pack(pady=20)
+        
+        self.reset_polygon_button = Button(
+            self.menu_frame,
+            text="Reiniciar Polígono",
+            command=self.reset_polygon,
+            font=("Helvetica", 16),
+            bg="#f4a261",
+            fg="#ffffff",
+            relief="flat",
+            width=28,
+            pady=10,
+        )
+        self.reset_polygon_button.pack(pady=20)
 
         self.choose_output_button = Button(
             self.menu_frame,
@@ -175,26 +186,18 @@ class VideoProcessorApp:
         style = self.button_enabled_style if enabled else self.button_disabled_style
         button.config(**style)
         
-    def select_point(self, event):
+    def draw_safe_zone(self, event):
         """Captura el color en el punto donde el usuario hace clic."""
-        if len(self.selected_points) < 6:  # Limitar a 6 puntos
-            x, y = event.x, event.y
-            color = self.get_color_at_point(x, y)
-            self.selected_points.append(color)
+        # Aquí ya no reiniciamos self.train_zone    , ya que el polígono se debe dibujar después
+        self.info_label.config(text="Dibuje un polígono sobre el vehículo del metro y luego presione 'Guardar'.")
+        self.drawing_enabled = True
+        # Habilitar eventos para dibujar el polígono
+        self.canvas.bind("<ButtonPress-1>", lambda event1: self.start_polygon(self.train_zone, event1))
+        self.canvas.bind("<ButtonPress-3>", lambda event1: self.close_polygon(self.train_zone))
 
-            # Mostrar un círculo en el canvas donde se hizo clic
-            self.canvas.create_oval(x-5, y-5, x+5, y+5, outline="red", width=2)
-            print(f"Puntos seleccionados: {len(self.selected_points)}")
-            # Si el usuario seleccionó 6 puntos, habilitar el botón de guardar
-        if len(self.selected_points) == 6:
-            print("Se han seleccionado 6 puntos.")
-            self.info_label.config(text="Dibuje 6 rectángulos sobre el vehículo del metro y luego presiona 'Guardar'. Asegúrate de que los rectángulos cubran la mayor parte del transporte, ya que esto optimizará la calidad del procesamiento")
-            self.canvas.bind("<ButtonPress-1>", self.start_polygon)
-            self.canvas.bind("<B1-Motion>", self.draw_polygon)
-            self.canvas.bind("<ButtonRelease-1>", self.finish_polygon)
-            
-            if len(self.polygon) == 1:
-                self.set_button_state(self.save_button, True)
+            # Activar el botón de guardar si el polígono está completo
+        if len(self.train_zone) > 2:  # El polígono debe tener al menos 3 puntos
+            self.set_button_state(self.save_button, True)
 
     def get_color_at_point(self, x, y):
         """Obtiene el color de un pixel en las coordenadas (x, y) en el frame."""
@@ -225,12 +228,15 @@ class VideoProcessorApp:
         self.first_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         self.display_frame(self.first_frame)
 
-        self.info_label.config(text="Seleccione 6 puntos de la franja amarilla")
+        self.info_label.config(text="Dibuje un poligono que represente la zona segura (franja amarilla) y luego presione 'Guardar'")
         self.set_button_state(self.save_button, True)
-
+        self.drawing_enabled = True
+        self.canvas.bind("<ButtonPress-1>", lambda event: self.start_polygon(self.safe_zone, event))
+        self.canvas.bind("<ButtonPress-3>", lambda event: self.close_polygon(self.safe_zone))
         
         # Permitir al usuario dibujar en el canvas
-        self.canvas.bind("<ButtonPress-1>", self.select_point) 
+        if len(self.safe_zone) > 2:
+            self.canvas.bind("<ButtonPress-1>", self.draw_safe_zone)
 
 
     def display_frame(self, frame):
@@ -247,32 +253,64 @@ class VideoProcessorApp:
             self.info_label.config(text="Carpeta seleccionada correctamente.")
             self.set_button_state(self.process_button, True)
 
-    def start_polygon(self, event):
-        """Inicia el dibujo del polígono."""
-        if self.polygon is None:  # Permitir solo un polígono
-            self.current_rectangle = [(event.x, event.y)]
+    def start_polygon(self, zone, event):
+        """Inicia el dibujo del polígono y marca los puntos."""
+        if not self.drawing_enabled:
+            return  # No permitir dibujar si no está habilitado
 
-    def draw_polygon(self, event):
-        """Dibuja líneas al mover el cursor."""
-        if self.current_rectangle:
-            self.current_rectangle.append((event.x, event.y))
-            x1, y1 = self.current_rectangle[-2]
-            x2, y2 = self.current_rectangle[-1]
-            self.canvas.create_line(x1, y1, x2, y2, fill="#ec253a", width=2)
+        if len(zone) == 0:  # Si no hay puntos, iniciar un nuevo polígono
+            zone = [(event.x, event.y)]
+            # Dibujar un círculo en el primer punto
+            self.canvas.create_oval(
+                event.x - 5, event.y - 5, event.x + 5, event.y + 5,
+                outline="green", fill="green", width=2, tags="polygon_point"
+            )
+        else:
+            # Añadir un punto al polígono
+            zone.append((event.x, event.y))
+            self.canvas.create_oval(
+                event.x - 5, event.y - 5, event.x + 5, event.y + 5,
+                outline="blue", fill="blue", width=2, tags="polygon_point"
+            )
+        
+        # Redibujar el polígono para visualizar las líneas
+        draw_polygon(self)
 
-    def finish_polygon(self, event):
-        """Finaliza el dibujo del polígono."""
-        if self.current_rectangle:
-            self.current_rectangle.append(self.current_rectangle[0])  # Cerrar el polígono
-            self.polygon = self.current_rectangle
-            self.info_label.config(text="Polígono guardado. Seleccione la carpeta de salida.")
-            self.set_button_state(self.save_button, True)
-            self.current_rectangle = None
+
+    def close_polygon(self,zone):
+        """Cierra el polígono al hacer clic derecho, lo pinta por dentro e imprime las coordenadas."""
+        if len(zone) > 2:  # Solo cerrar si hay más de dos puntos
+            # Añadir el primer punto para cerrar el polígono
+            zone.append(zone[0])
+
+            # Pintar el polígono por dentro
+            self.canvas.create_polygon(
+                zone , fill="lightblue", outline="blue", width=2, tags="polygon_fill"
+            )
+
+            # Imprimir las coordenadas del polígono
+            print("Coordenadas del polígono:")
+            for point in zone    :
+                print(point)
+
+            # Bloquear el dibujo de nuevos puntos
+            self.drawing_enabled = False
+
+            # Mostrar mensaje de que el polígono está cerrado
+            print("Polígono cerrado. Haz clic en 'Resetear' para dibujar uno nuevo.")
+                
+    def reset_polygon(self):
+        """Reinicia el dibujo del polígono actual."""
+        self.train_zone  = []
+        self.canvas.delete("polygon_point")
+        self.canvas.delete("polygon_line")
+        self.info_label.config(text="Dibuje un nuevo polígono haciendo clic en el canvas.")
+        self.set_button_state(self.save_button, False)
 
     def save_polygon(self):
         """Guarda el polígono dibujado."""
-        if self.polygon:
-            print("Polígono guardado:", self.polygon)
+        if self.train_zone  :
+            print("Polígono guardado:", self.train_zone )
             self.info_label.config(text="Polígono guardado correctamente.")
             self.info_label.after(2500, self.show_output_message)
     
@@ -283,7 +321,7 @@ class VideoProcessorApp:
 
     def process_video(self):
         """Procesa el video y guarda el archivo procesado."""
-        if self.video_path and len(self.polygon) == 1 and self.output_path and self.selected_points:
+        if self.video_path and len(self.train_zone  ) > 0 and self.output_path and self.safe_zone:
             self.set_button_state(self.process_button, False)
             self.info_label.config(text="Procesando video...")
 
@@ -291,17 +329,19 @@ class VideoProcessorApp:
             self.progress_bar["value"] = 0
             self.progress_bar["maximum"] = 100  # Asume que el progreso va de 0 a 100
             self.progress_bar.pack(in_=self.progress_bar_frame, pady=4)
-             
+
             def processing():
                 # Llamada al procesamiento con la barra de progreso
-                process_video(self.video_path, self.output_path, self.selected_points, self.polygon, self.progress_bar)
+                process_video(self.video_path, self.output_path, self.safe_zone, self.train_zone  , self.display_frame, self.progress_bar)
 
                 self.info_label.config(text="Video procesado exitosamente.")
                 self.set_button_state(self.process_button, True)
                 self.progress_bar["value"] = 0  # Resetear la barra
                 self.progress_bar.pack_forget()  # Ocultar la barra cuando termine
 
-            Thread(target=processing).start()
+            # Usar un solo hilo para evitar crear múltiples hilos
+            processing_thread = Thread(target=processing)
+            processing_thread.start()
         else:
             self.info_label.config(text="Complete los pasos anteriores antes de procesar el video.")
 
@@ -310,7 +350,7 @@ class VideoProcessorApp:
         # Limpiar variables
         self.video_path = None
         self.first_frame = None
-        self.polygon = []
+        self.train_zone  = []
         self.current_rectangle = None
         self.cap = None
         self.output_path = None
