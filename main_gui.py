@@ -29,13 +29,15 @@ class VideoProcessorApp:
         # Variables
         self.video_path = None
         self.first_frame = None
-        self.train_zone  = []
         self.current_rectangle = None
         self.cap = None
         self.output_path = None
         self.frame_width = 0
         self.frame_height = 0
         self.safe_zone = []
+        self.train_zone = []
+        self.safe_zone_saved = False
+        self.train_zone_saved = False
         self.drawing_enabled = False 
 
         # Estilos para botones
@@ -186,9 +188,8 @@ class VideoProcessorApp:
         style = self.button_enabled_style if enabled else self.button_disabled_style
         button.config(**style)
         
-    def draw_safe_zone(self, event):
+    def draw_train_zone(self):
         """Captura el color en el punto donde el usuario hace clic."""
-        # Aquí ya no reiniciamos self.train_zone    , ya que el polígono se debe dibujar después
         self.info_label.config(text="Dibuje un polígono sobre el vehículo del metro y luego presione 'Guardar'.")
         self.drawing_enabled = True
         # Habilitar eventos para dibujar el polígono
@@ -196,8 +197,9 @@ class VideoProcessorApp:
         self.canvas.bind("<ButtonPress-3>", lambda event1: self.close_polygon(self.train_zone))
 
             # Activar el botón de guardar si el polígono está completo
-        if len(self.train_zone) > 2:  # El polígono debe tener al menos 3 puntos
+        if len(self.train_zone) > 2:  # El polígono debe tener al menos 2 puntos
             self.set_button_state(self.save_button, True)
+
 
     def get_color_at_point(self, x, y):
         """Obtiene el color de un pixel en las coordenadas (x, y) en el frame."""
@@ -233,10 +235,7 @@ class VideoProcessorApp:
         self.drawing_enabled = True
         self.canvas.bind("<ButtonPress-1>", lambda event: self.start_polygon(self.safe_zone, event))
         self.canvas.bind("<ButtonPress-3>", lambda event: self.close_polygon(self.safe_zone))
-        
-        # Permitir al usuario dibujar en el canvas
-        if len(self.safe_zone) > 2:
-            self.canvas.bind("<ButtonPress-1>", self.draw_safe_zone)
+
 
 
     def display_frame(self, frame):
@@ -259,7 +258,7 @@ class VideoProcessorApp:
             return  # No permitir dibujar si no está habilitado
 
         if len(zone) == 0:  # Si no hay puntos, iniciar un nuevo polígono
-            zone = [(event.x, event.y)]
+            zone.append((event.x, event.y))  # Modificado para agregar en la lista
             # Dibujar un círculo en el primer punto
             self.canvas.create_oval(
                 event.x - 5, event.y - 5, event.x + 5, event.y + 5,
@@ -272,12 +271,19 @@ class VideoProcessorApp:
                 event.x - 5, event.y - 5, event.x + 5, event.y + 5,
                 outline="blue", fill="blue", width=2, tags="polygon_point"
             )
-        
-        # Redibujar el polígono para visualizar las líneas
-        draw_polygon(self)
 
+        # Redibujar el polígono para visualizar las líneas
+        self.draw_polygon(zone)  # Corrección aquí, asegurando que se pasa `zone`
+
+    def draw_polygon(self, zone):
+        """Dibuja las líneas que conectan los puntos del polígono."""
+        if len(zone) > 1:
+            x1, y1 = zone[-2]  # Último punto anterior
+            x2, y2 = zone[-1]  # Nuevo punto agregado
+            self.canvas.create_line(x1, y1, x2, y2, fill="#ec253a", width=2)
 
     def close_polygon(self,zone):
+        print("ZONE CLOSE "+ str(zone))
         """Cierra el polígono al hacer clic derecho, lo pinta por dentro e imprime las coordenadas."""
         if len(zone) > 2:  # Solo cerrar si hay más de dos puntos
             # Añadir el primer punto para cerrar el polígono
@@ -308,12 +314,27 @@ class VideoProcessorApp:
         self.set_button_state(self.save_button, False)
 
     def save_polygon(self):
-        """Guarda el polígono dibujado."""
-        if self.train_zone  :
-            print("Polígono guardado:", self.train_zone )
-            self.info_label.config(text="Polígono guardado correctamente.")
+        """Guarda el polígono si tiene al menos tres puntos válidos."""
+
+        if len(self.safe_zone) >= 2 and self.safe_zone_saved == False:
+            self.safe_zone_saved = True
+            print("Polígono de zona segura guardado:", self.safe_zone)
+            self.info_label.config(text="Zona segura guardada correctamente.")
+            self.set_button_state(self.save_button, True)
+            self.draw_train_zone()
+            self.info_label.config(text="Dibuje un poligono que represente la zona del tren y luego presione 'Guardar'")
+
+        elif len(self.train_zone) >= 2 and self.train_zone_saved == False:
+            self.train_zone_saved = True
+            print("Polígono de zona de tren guardado:", self.train_zone)
+            self.info_label.config(text="Zona de tren guardada correctamente.")
             self.info_label.after(2500, self.show_output_message)
-    
+
+        else:
+            # Si ninguna zona tiene al menos 3 puntos, mostrar un mensaje de error
+            self.info_label.config(text="El polígono debe tener al menos 2 puntos.")
+            print("Error: El polígono debe tener al menos tres puntos para guardarse.")
+
     def show_output_message(self):
         """Muestra el mensaje para seleccionar la carpeta de salida."""
         self.info_label.config(text="Seleccione la carpeta de salida.")

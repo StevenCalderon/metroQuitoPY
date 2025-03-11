@@ -63,7 +63,7 @@ def evaluate_train_state(frame, prev_frame, train_moving, train_stopped_counter,
 
 
 
-def process_video(video_path, output_path, safe_zone, polygon_metro, display_frame, progress_bar=None):
+def process_video(video_path, output_path, polygon_safe_zone, polygon_metro, display_frame, progress_bar=None):
     model = load_yolo_model(YOLO_MODEL_PATH)
     classes = load_classes(CLASSES_FILE)
     
@@ -88,7 +88,6 @@ def process_video(video_path, output_path, safe_zone, polygon_metro, display_fra
 
     # Variables de procesamiento
     last_boxes, last_class_ids = [], []
-    yellow_band_points = None
     ret, prev_frame = cap.read()
     if not ret:
         print("Error: No se pudo leer el primer frame.")
@@ -106,10 +105,6 @@ def process_video(video_path, output_path, safe_zone, polygon_metro, display_fra
             print("Error: No se pudo leer un frame.")
             break
 
-        # Detectar bandas amarillas si no se detectaron previamente
-        if yellow_band_points is None:
-            yellow_band_points = detect_yellow_band(frame, selected_points)
-
         # Procesar frame
         last_boxes, last_class_ids = perform_yolo_detection(model, frame)
         train_moving, train_stopped_counter, frames_wait_procces_roi, consecutive_moving_frames = evaluate_train_state(
@@ -121,7 +116,7 @@ def process_video(video_path, output_path, safe_zone, polygon_metro, display_fra
         draw_polygon(frame, polygon_metro)
         print("TREN EN MOVIMIENTO", train_moving)
         if train_moving:
-            draw_detections(frame, last_boxes, last_class_ids, yellow_band_points, classes)
+            draw_detections(frame, last_boxes, last_class_ids, polygon_safe_zone, classes)
         else:
             cv2.putText(frame, "Tren detenido", (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, GREEN_COLOR, 2)
             cv2.putText(frame, "Alerta desactivada", (50, 90), cv2.FONT_HERSHEY_SIMPLEX, 1, GREEN_COLOR, 2)

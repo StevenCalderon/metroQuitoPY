@@ -4,9 +4,9 @@ import numpy as np
 
 from share.constants.config import MOVEMENT_THRESHOLD
 
-def create_dynamic_color_range(selected_points):
+def create_dynamic_color_range(polygon_safe_zone):
     # Convertir la lista de colores a un array de numpy
-    colors = np.array(selected_points)
+    colors = np.array(polygon_safe_zone)
     
     # Promediar los colores seleccionados
     average_color = np.mean(colors, axis=0)
@@ -17,9 +17,9 @@ def create_dynamic_color_range(selected_points):
     
     return lower_yellow, upper_yellow
 
-def detect_yellow_band(frame, selected_points):
+def detect_yellow_band(frame, polygon_safe_zone):
     hsv_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
-    lower_yellow, upper_yellow = create_dynamic_color_range(selected_points)
+    lower_yellow, upper_yellow = create_dynamic_color_range(polygon_safe_zone)
     yellow_mask = cv2.inRange(hsv_frame, lower_yellow, upper_yellow)
 
     kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 20))
