@@ -1,5 +1,5 @@
-MOVEMENT_THRESHOLD = 700 
-CONFIDENCE_THRESHOLD = 0.5
+MOVEMENT_THRESHOLD = 700
+CONFIDENCE_THRESHOLD = 0.6
 FRAME_SKIP = 2
 SAFE_WIDTH = 20
 DATA_VIDEO = './data/example01.mp4'
@@ -16,6 +16,6 @@ ALERT_COLOR = (0, 0, 255)
 ROI_COLOR = (180, 180, 180)
 
 # Thresholds for significant movement on the train
-MOVEMENT_THRESHOLD_METRO_MOVE = 0.001  # Threshold for detecting train movement
-MOVEMENT_THRESHOLD_METRO_STOP = 0.005  # Threshold to detect when the train stops
-STOPPED_FRAME_THRESHOLD = 3  # Consecutive frames to consider that the train is stopped or moving
+MOVEMENT_THRESHOLD_METRO_MOVE = 0.12 # Threshold for detecting train movement
+MOVEMENT_THRESHOLD_METRO_STOP = 0.11 # Threshold to detect when the train stops
+STOPPED_FRAME_THRESHOLD = 5  # Increased to require more stopped frames

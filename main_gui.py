@@ -17,68 +17,58 @@ class VideoProcessorApp:
         self.root = root
         self.root.title("Metro de Quito + IA")
 
-        # Obtener dimensiones de la pantalla
-        screen_width = self.root.winfo_screenwidth()
-        screen_height = self.root.winfo_screenheight()
+        self._configure_window()
+        self._initialize_variables()
+        self._initialize_styles()
+        self._create_main_layout()
+        self._create_menu()
+        self._create_video_canvas()
 
-        # Ajustar la ventana al tamaño de la pantalla
+    def _configure_window(self):
+        screen_width, screen_height = self.root.winfo_screenwidth(), self.root.winfo_screenheight()
         self.root.geometry(f"{screen_width}x{screen_height}")
-        self.root.config(bg="#f4f4f4")  # Fondo gris claro
-        self.root.resizable(True, False)  # Desactivar redimensionamiento en alto
+        self.root.config(bg="#f4f4f4")
+        self.root.resizable(True, False)
 
-        # Variables
+    def _initialize_variables(self):
         self.video_path = None
         self.first_frame = None
         self.current_rectangle = None
         self.cap = None
         self.output_path = None
-        self.frame_width = 0
-        self.frame_height = 0
-        self.safe_zone = []
-        self.train_zone = []
-        self.safe_zone_saved = False
-        self.train_zone_saved = False
-        self.drawing_enabled = False 
+        self.frame_width, self.frame_height = 0, 0
+        self.safe_zone, self.train_zone = [], []
+        self.safe_zone_saved, self.train_zone_saved, self.drawing_enabled = False, False, False
+        self.current_step = 0  # Nueva variable para rastrear el paso actual
+        self.instructions = [
+            "1. Cargue un video del Metro de Quito para empezar.",
+            "2. Dibuje un polígono sobre la franja amarilla de seguridad.",
+            "3. Guarde la zona segura y dibuje un polígono sobre el vehículo del metro.",
+            "4. Guarde la zona del tren y seleccione la carpeta de salida.",
+            "5. Procese el video para detectar personas cruzando la línea de seguridad."
+        ]
 
-        # Estilos para botones
-        self.button_enabled_style = {
-            "font": ("Helvetica", 18),
-            "bg": "#223e77",
-            "fg": "#ffffff",
-            "relief": "flat",
-            "width": 28,
-            "pady": 10,
-            "state": tk.ACTIVE,
-        }
+    def _initialize_styles(self):
+        self.button_enabled_style = {"font": ("Helvetica", 18), "bg": "#223e77", "fg": "#ffffff", "relief": "flat",
+                                     "width": 28, "pady": 10, "state": tk.ACTIVE}
+        self.button_disabled_style = {"font": ("Helvetica", 18), "bg": "#cccccc", "fg": "#666666", "relief": "flat",
+                                      "width": 28, "pady": 10, "state": tk.DISABLED}
 
-        self.button_disabled_style = {
-            "font": ("Helvetica", 18),
-            "bg": "#cccccc",
-            "fg": "#666666",
-            "relief": "flat",
-            "width": 28,
-            "pady": 10,
-            "state": tk.DISABLED,
-        }
-
-        # Contenedor principal
+    def _create_main_layout(self):
         self.main_frame = Frame(self.root, bg="#f4f4f4")
         self.main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 
-        # Usar grid para dividir la ventana en proporciones
         self.main_frame.grid_rowconfigure(0, weight=1)
-        self.main_frame.grid_columnconfigure(0, weight=3)  # Menú (30%)
-        self.main_frame.grid_columnconfigure(1, weight=7)  # Video (70%)
+        self.main_frame.grid_columnconfigure(0, weight=3)
+        self.main_frame.grid_columnconfigure(1, weight=7)
 
-        # Columna izquierda: Menú
         self.menu_frame = Frame(self.main_frame, bg="#ffffff", relief="raised", bd=2)
         self.menu_frame.grid(row=0, column=0, sticky="nswe", padx=10, pady=10)
 
-        # Columna derecha: Video
         self.video_frame = Frame(self.main_frame, bg="#000000")
         self.video_frame.grid(row=0, column=1, sticky="nswe", padx=10, pady=10)
 
-        # Menú (columna izquierda)
+    def _create_menu(self):
         self.menu_label = Label(
             self.menu_frame,
             text="Metro de Quito + IA",
@@ -89,99 +79,139 @@ class VideoProcessorApp:
             padx=20,
         )
         self.menu_label.pack()
-
+        
+        self.instructions_frame = Frame(self.menu_frame, bg="#ffffff")
+        self.instructions_frame.pack(pady=10, padx=20, fill="x")
+        
+        self.instructions_label = Label(
+            self.instructions_frame,
+            text="Instrucciones:",
+            font=("Helvetica", 16, "bold"),
+            fg="#223e77",
+            bg="#ffffff",
+            pady=5,
+        )
+        self.instructions_label.pack()
+        
         self.info_label = Label(
-            self.menu_frame,
-            text="Cargue un video del Metro de Quito para empezar.",
-            font=("Helvetica", 18),
+            self.instructions_frame,
+            text=self.instructions[0],
+            font=("Helvetica", 14),
             fg="#444444",
             bg="#ffffff",
             wraplength=380,
-            justify="center",
-            pady=20,
+            justify="left",
+            pady=10,
         )
+        self.info_label.pack()
         
-        self.info_label.pack(pady=40)
-        self.progress_bar_frame = Frame(self.menu_frame, bg="#ffffff")  # Contenedor para la barra de progreso
+        self.progress_bar_frame = Frame(self.menu_frame, bg="#ffffff")
         self.progress_bar_frame.pack(pady=10)
-        self.progress_bar = ttk.Progressbar(self.menu_frame, orient="horizontal", length=200, mode="determinate")
-
-        # Botones en el orden correcto
-        self.load_button = Button(
+        
+        self.progress_label = Label(
+            self.progress_bar_frame,
+            text="Progreso:",
+            font=("Helvetica", 12),
+            fg="#444444",
+            bg="#ffffff",
+        )
+        self.progress_label.pack()
+        
+        self.progress_bar = ttk.Progressbar(
             self.menu_frame,
-            text="1.- Cargar Video",
+            orient="horizontal",
+            length=200,
+            mode="determinate"
+        )
+
+        self.buttons_frame = Frame(self.menu_frame, bg="#ffffff")
+        self.buttons_frame.pack(pady=20)
+
+        self.load_button = Button(
+            self.buttons_frame,
+            text="1. Cargar Video",
             command=self.load_video,
             **self.button_enabled_style
         )
-        self.load_button.pack(pady=20)
+        self.load_button.pack(pady=10)
+        self.create_tooltip(self.load_button, "Seleccione un video del Metro de Quito para procesar")
 
         self.save_button = Button(
-            self.menu_frame,
-            text="2.-Guardar ROIs",
+            self.buttons_frame,
+            text="2. Guardar ROIs",
             command=self.save_polygon,
             **self.button_disabled_style
         )
-        self.save_button.pack(pady=20)
-        
-        self.reset_polygon_button = Button(
-            self.menu_frame,
-            text="Reiniciar Polígono",
-            command=self.reset_polygon,
-            font=("Helvetica", 16),
-            bg="#f4a261",
-            fg="#ffffff",
-            relief="flat",
-            width=28,
-            pady=10,
-        )
-        self.reset_polygon_button.pack(pady=20)
+        self.save_button.pack(pady=10)
+        self.create_tooltip(self.save_button, "Guarde las zonas seleccionadas para continuar")
 
         self.choose_output_button = Button(
-            self.menu_frame,
-            text="3.- Seleccionar Carpeta de Salida",
+            self.buttons_frame,
+            text="3. Seleccionar Carpeta de Salida",
             command=self.choose_output_folder,
             **self.button_disabled_style
         )
-        self.choose_output_button.pack(pady=20)
+        self.choose_output_button.pack(pady=10)
+        self.create_tooltip(self.choose_output_button, "Seleccione dónde guardar el video procesado")
 
         self.process_button = Button(
-            self.menu_frame,
-            text="4.- Procesar Video",
+            self.buttons_frame,
+            text="4. Procesar Video",
             command=self.process_video,
             **self.button_disabled_style
         )
-        self.process_button.pack(pady=20)
-        
-        # Botón de reinicio
-        self.reset_button = Button(
-            self.menu_frame,
-            text="Reiniciar",
-            command=self.reset_app,
-            font=("Helvetica", 16),
+        self.process_button.pack(pady=10)
+        self.create_tooltip(self.process_button, "Inicie el procesamiento del video")
+
+        self.control_frame = Frame(self.menu_frame, bg="#ffffff")
+        self.control_frame.pack(pady=20)
+
+        self.reset_polygon_button = Button(
+            self.control_frame,
+            text="Reiniciar Polígono",
+            command=self.reset_polygon,
+            font=("Helvetica", 14),
             bg="#f4a261",
             fg="#ffffff",
             relief="flat",
-            width=28,
-            pady=10,
+            width=20,
+            pady=8,
         )
-        self.reset_button.pack(pady=20)
+        self.reset_polygon_button.pack(pady=5)
+        self.create_tooltip(self.reset_polygon_button, "Reinicia el polígono actual para dibujarlo de nuevo")
+
+        self.reset_button = Button(
+            self.control_frame,
+            text="Reiniciar Todo",
+            command=self.reset_app,
+            font=("Helvetica", 14),
+            bg="#f4a261",
+            fg="#ffffff",
+            relief="flat",
+            width=20,
+            pady=8,
+        )
+        self.reset_button.pack(pady=5)
+        self.create_tooltip(self.reset_button, "Reinicia toda la aplicación a su estado inicial")
 
         self.exit_button = Button(
-            self.menu_frame,
+            self.control_frame,
             text="Salir",
             command=self.exit_app,
-            font=("Helvetica", 16),
+            font=("Helvetica", 14),
             bg="#870000",
             fg="#ffffff",
             relief="flat",
-            width=28,
-            pady=10,
+            width=20,
+            pady=8,
         )
-        self.exit_button.pack(pady=40)
+        self.exit_button.pack(pady=5)
+        self.create_tooltip(self.exit_button, "Cierra la aplicación")
 
-        # Canvas para el video
+    def _create_video_canvas(self):
+        """Crea el canvas para mostrar el video"""
         self.canvas = Canvas(self.video_frame, bg="#000000", highlightthickness=0)
-        self.canvas.pack()
+        self.canvas.pack(fill=tk.BOTH, expand=True)
 
     def set_button_state(self, button, enabled):
         """Aplica estilos habilitados o deshabilitados a un botón."""
@@ -190,21 +220,20 @@ class VideoProcessorApp:
         
     def draw_train_zone(self):
         """Captura el color en el punto donde el usuario hace clic."""
-        self.info_label.config(text="Dibuje un polígono sobre el vehículo del metro y luego presione 'Guardar'.")
+        self.update_instructions(2)
+        self.info_label.config(text="Dibuje un polígono sobre el vehículo del metro:\n1. Haga clic izquierdo para añadir puntos\n2. Haga clic derecho para cerrar el polígono")
         self.drawing_enabled = True
-        # Habilitar eventos para dibujar el polígono
         self.canvas.bind("<ButtonPress-1>", lambda event1: self.start_polygon(self.train_zone, event1))
         self.canvas.bind("<ButtonPress-3>", lambda event1: self.close_polygon(self.train_zone))
 
-            # Activar el botón de guardar si el polígono está completo
-        if len(self.train_zone) > 2:  # El polígono debe tener al menos 2 puntos
+        if len(self.train_zone) > 2:
             self.set_button_state(self.save_button, True)
 
 
     def get_color_at_point(self, x, y):
         """Obtiene el color de un pixel en las coordenadas (x, y) en el frame."""
-        color_bgr = self.first_frame[y, x]  # Imagen RGB en lugar de BGR
-        return tuple(color_bgr)  # Devuelve el color como (R, G, B)
+        color_bgr = self.first_frame[y, x]
+        return tuple(color_bgr)
 
     def load_video(self):
         """Carga un video y muestra el primer frame."""
@@ -212,7 +241,6 @@ class VideoProcessorApp:
         if not self.video_path:
             return
 
-        # Abrir el video y obtener el primer frame
         self.cap = cv2.VideoCapture(self.video_path)
         ret, frame = self.cap.read()
 
@@ -220,17 +248,15 @@ class VideoProcessorApp:
             self.info_label.config(text="Error al cargar el video. Por favor, intente de nuevo.")
             return
 
-        # Guardar las dimensiones del frame original
         self.frame_height, self.frame_width = frame.shape[:2]
 
-        # Configurar el canvas para que coincida con las dimensiones del video
         self.canvas.config(width=self.frame_width, height=self.frame_height)
 
-        # Convertir el frame a RGB y mostrarlo en el canvas
         self.first_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         self.display_frame(self.first_frame)
 
-        self.info_label.config(text="Dibuje un poligono que represente la zona segura (franja amarilla) y luego presione 'Guardar'")
+        self.update_instructions(1)
+        self.info_label.config(text="Dibuje un polígono sobre la franja amarilla de seguridad:\n1. Haga clic izquierdo para añadir puntos\n2. Haga clic derecho para cerrar el polígono")
         self.set_button_state(self.save_button, True)
         self.drawing_enabled = True
         self.canvas.bind("<ButtonPress-1>", lambda event: self.start_polygon(self.safe_zone, event))
@@ -239,10 +265,9 @@ class VideoProcessorApp:
 
 
     def display_frame(self, frame):
-        """Muestra el frame sin redimensionar."""
         img = Image.fromarray(frame)
         img_tk = ImageTk.PhotoImage(image=img)
-        self.canvas.img_tk = img_tk  # Mantener referencia para evitar recolección de basura
+        self.canvas.img_tk = img_tk
         self.canvas.create_image(0, 0, anchor=tk.NW, image=img_tk)
 
     def choose_output_folder(self):
@@ -253,56 +278,45 @@ class VideoProcessorApp:
             self.set_button_state(self.process_button, True)
 
     def start_polygon(self, zone, event):
-        """Inicia el dibujo del polígono y marca los puntos."""
         if not self.drawing_enabled:
-            return  # No permitir dibujar si no está habilitado
+            return
 
-        if len(zone) == 0:  # Si no hay puntos, iniciar un nuevo polígono
-            zone.append((event.x, event.y))  # Modificado para agregar en la lista
-            # Dibujar un círculo en el primer punto
+        if len(zone) == 0:
+            zone.append((event.x, event.y))
             self.canvas.create_oval(
                 event.x - 5, event.y - 5, event.x + 5, event.y + 5,
                 outline="green", fill="green", width=2, tags="polygon_point"
             )
         else:
-            # Añadir un punto al polígono
             zone.append((event.x, event.y))
             self.canvas.create_oval(
                 event.x - 5, event.y - 5, event.x + 5, event.y + 5,
                 outline="blue", fill="blue", width=2, tags="polygon_point"
             )
 
-        # Redibujar el polígono para visualizar las líneas
-        self.draw_polygon(zone)  # Corrección aquí, asegurando que se pasa `zone`
+        self.draw_polygon(zone)
 
     def draw_polygon(self, zone):
-        """Dibuja las líneas que conectan los puntos del polígono."""
         if len(zone) > 1:
-            x1, y1 = zone[-2]  # Último punto anterior
-            x2, y2 = zone[-1]  # Nuevo punto agregado
+            x1, y1 = zone[-2]
+            x2, y2 = zone[-1]
             self.canvas.create_line(x1, y1, x2, y2, fill="#ec253a", width=2)
 
     def close_polygon(self,zone):
         print("ZONE CLOSE "+ str(zone))
-        """Cierra el polígono al hacer clic derecho, lo pinta por dentro e imprime las coordenadas."""
-        if len(zone) > 2:  # Solo cerrar si hay más de dos puntos
-            # Añadir el primer punto para cerrar el polígono
+        if len(zone) > 2:
             zone.append(zone[0])
 
-            # Pintar el polígono por dentro
             self.canvas.create_polygon(
                 zone , fill="lightblue", outline="blue", width=2, tags="polygon_fill"
             )
 
-            # Imprimir las coordenadas del polígono
             print("Coordenadas del polígono:")
             for point in zone    :
                 print(point)
 
-            # Bloquear el dibujo de nuevos puntos
             self.drawing_enabled = False
 
-            # Mostrar mensaje de que el polígono está cerrado
             print("Polígono cerrado. Haz clic en 'Resetear' para dibujar uno nuevo.")
                 
     def reset_polygon(self):
@@ -318,57 +332,47 @@ class VideoProcessorApp:
 
         if len(self.safe_zone) >= 2 and self.safe_zone_saved == False:
             self.safe_zone_saved = True
-            print("Polígono de zona segura guardado:", self.safe_zone)
             self.info_label.config(text="Zona segura guardada correctamente.")
             self.set_button_state(self.save_button, True)
             self.draw_train_zone()
-            self.info_label.config(text="Dibuje un poligono que represente la zona del tren y luego presione 'Guardar'")
 
         elif len(self.train_zone) >= 2 and self.train_zone_saved == False:
             self.train_zone_saved = True
-            print("Polígono de zona de tren guardado:", self.train_zone)
             self.info_label.config(text="Zona de tren guardada correctamente.")
+            self.update_instructions(3)
             self.info_label.after(2500, self.show_output_message)
 
         else:
-            # Si ninguna zona tiene al menos 3 puntos, mostrar un mensaje de error
             self.info_label.config(text="El polígono debe tener al menos 2 puntos.")
             print("Error: El polígono debe tener al menos tres puntos para guardarse.")
 
     def show_output_message(self):
-        """Muestra el mensaje para seleccionar la carpeta de salida."""
-        self.info_label.config(text="Seleccione la carpeta de salida.")
+        self.info_label.config(text="Seleccione la carpeta donde desea guardar el video procesado.")
         self.set_button_state(self.choose_output_button, True)
 
     def process_video(self):
-        """Procesa el video y guarda el archivo procesado."""
         if self.video_path and len(self.train_zone  ) > 0 and self.output_path and self.safe_zone:
             self.set_button_state(self.process_button, False)
             self.info_label.config(text="Procesando video...")
 
-            # Muestra la barra de progreso
             self.progress_bar["value"] = 0
-            self.progress_bar["maximum"] = 100  # Asume que el progreso va de 0 a 100
+            self.progress_bar["maximum"] = 100
             self.progress_bar.pack(in_=self.progress_bar_frame, pady=4)
 
             def processing():
-                # Llamada al procesamiento con la barra de progreso
                 process_video(self.video_path, self.output_path, self.safe_zone, self.train_zone  , self.display_frame, self.progress_bar)
 
                 self.info_label.config(text="Video procesado exitosamente.")
                 self.set_button_state(self.process_button, True)
-                self.progress_bar["value"] = 0  # Resetear la barra
-                self.progress_bar.pack_forget()  # Ocultar la barra cuando termine
+                self.progress_bar["value"] = 0
+                self.progress_bar.pack_forget()
 
-            # Usar un solo hilo para evitar crear múltiples hilos
             processing_thread = Thread(target=processing)
             processing_thread.start()
         else:
             self.info_label.config(text="Complete los pasos anteriores antes de procesar el video.")
 
     def reset_app(self):
-        """Reinicia la aplicación a su estado inicial."""
-        # Limpiar variables
         self.video_path = None
         self.first_frame = None
         self.train_zone  = []
@@ -377,26 +381,56 @@ class VideoProcessorApp:
         self.output_path = None
         self.frame_width = 0
         self.frame_height = 0
+        self.safe_zone_saved = False
+        self.train_zone_saved = False
+        self.drawing_enabled = False
+        self.current_step = 0
+    
+        self.update_instructions(0)
+        self.canvas.delete("all")
 
-        # Resetear interfaz
-        self.info_label.config(text="Cargue un video del Metro de Quito para empezar.")
-        self.canvas.delete("all")  # Limpiar canvas
-
-        # Restablecer botones
         self.set_button_state(self.load_button, True)
         self.set_button_state(self.save_button, False)
         self.set_button_state(self.choose_output_button, False)
         self.set_button_state(self.process_button, False)
 
-        # Ocultar barra de progreso
         self.progress_bar.pack_forget()
 
     def exit_app(self):
-        """Cierra la aplicación."""
         self.root.destroy()
 
+    def create_tooltip(self, widget, text):
+        def show_tooltip(event):
+            tooltip = tk.Toplevel()
+            tooltip.wm_overrideredirect(True)
+            tooltip.wm_geometry(f"+{event.x_root+10}+{event.y_root+10}")
+            
+            label = Label(
+                tooltip,
+                text=text,
+                justify="left",
+                background="#ffffe0",
+                relief="solid",
+                borderwidth=1,
+                font=("Helvetica", 10),
+                padx=5,
+                pady=5
+            )
+            label.pack()
+            
+            def hide_tooltip():
+                tooltip.destroy()
+            
+            widget.tooltip = tooltip
+            widget.bind('<Leave>', lambda e: hide_tooltip())
+        
+        widget.bind('<Enter>', show_tooltip)
 
-# Ejecutar la aplicación
+    def update_instructions(self, step):
+        self.current_step = step
+        self.info_label.config(text=self.instructions[step])
+
+
 root = tk.Tk()
 app = VideoProcessorApp(root)
 root.mainloop()
