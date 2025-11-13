@@ -2,6 +2,8 @@
 # 🚇 Metro Quito + AI: Intelligent Video Processing Application
 
 This is a Python-based desktop application that leverages AI-powered video processing to analyze train movements in Metro Quito. The application allows users to upload videos, define regions of interest (ROIs), and process these videos using advanced models like YOLOv8, resulting in an output video with the desired analytics.
+
+📎 **Post de [LinkedIn](https://www.linkedin.com/posts/steven-calderon-431535183_ia-seguridad-metroquito-activity-7308191714622521345-zVUR?utm_source=share&utm_medium=member_desktop&rcm=ACoAACtTwyUBq0TdIXgQ8X5IZK9CJtr6nFqdZFk).**
 ![appDesktop](https://github.com/user-attachments/assets/dcc70776-bd44-4971-81e0-fdb50f122127)
 
 ---
